@@ -1,5 +1,5 @@
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useGLTF, OrbitControls, ContactShadows, Environment, AdaptiveDpr, PerformanceMonitor } from "@react-three/drei";
+import { useGLTF, OrbitControls, ContactShadows, Environment, AdaptiveDpr, PerformanceMonitor, useProgress } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
@@ -23,15 +23,6 @@ function useIsMobile() {
 // first render — shaves a real chunk off perceived load time.
 useGLTF.preload("/helmet.glb");
 
-function Loader() {
-  return (
-    <mesh>
-      <sphereGeometry args={[0.4, 16, 16]} />
-      <meshBasicMaterial color="#111114" wireframe />
-    </mesh>
-  );
-}
-
 function Helmet() {
   const group = useRef();
   const { scene } = useGLTF("/helmet.glb");
@@ -47,11 +38,11 @@ function Helmet() {
     scene.position.z -= center.z;
     scene.scale.setScalar(1);
 
-    // Auto-fit: target the helmet's longest dimension to ~1.1 world units
-    // instead of a hardcoded scale, so it's not "too big" regardless of
-    // how the source file was authored/exported.
+    // Auto-fit: target the helmet's longest dimension to ~0.85 world
+    // units instead of a hardcoded scale, so it's not "too big" regardless
+    // of how the source file was authored/exported.
     const maxDim = Math.max(size.x, size.y, size.z) || 1;
-    setFitScale(1.1 / maxDim);
+    setFitScale(0.85 / maxDim);
 
     scene.traverse((child) => {
       if (child.isMesh && child.material) {
@@ -130,6 +121,36 @@ function PremiumLaserLighting() {
   );
 }
 
+// Plain HTML overlay, not a 3D object — costs nothing on the GPU while the
+// model streams in. useProgress hooks the global THREE loading manager so
+// this reflects real bytes-loaded, not a guess.
+function LoadingVeil() {
+  const { progress, active } = useProgress();
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    if (!active && progress >= 100) {
+      const t = setTimeout(() => setVisible(false), 350);
+      return () => clearTimeout(t);
+    }
+  }, [active, progress]);
+
+  if (!visible) return null;
+
+  return (
+    <div
+      style={{
+        ...styles.loadingVeil,
+        opacity: !active && progress >= 100 ? 0 : 1
+      }}
+    >
+      <div style={styles.loadingBarTrack}>
+        <div style={{ ...styles.loadingBarFill, width: `${Math.max(progress, 4)}%` }} />
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const isMobile = useIsMobile();
   // Lets PerformanceMonitor knock quality down further if a phone is
@@ -183,6 +204,8 @@ export default function App() {
   return (
     <div style={styles.wrapper}>
       
+      <LoadingVeil />
+
       <div style={styles.heroBackgroundText}>SYNTHETIC</div>
 
       {/* MANIFESTO ELEMENT */}
@@ -234,7 +257,7 @@ export default function App() {
               at a much cheaper resolution than desktop. */}
           <Environment preset="night" intensity={0.35} resolution={isMobile ? 32 : 256} />
 
-          <Suspense fallback={<Loader />}>
+          <Suspense fallback={null}>
             <Helmet />
           </Suspense>
 
@@ -296,6 +319,29 @@ const styles = {
     zIndex: 2,
     touchAction: "none" // stops iOS Safari's rubber-banding/pull-to-refresh
                          // from hijacking drag gestures meant for OrbitControls
+  },
+  loadingVeil: {
+    position: "absolute",
+    inset: 0,
+    zIndex: 20,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#040406",
+    transition: "opacity 0.35s ease",
+    pointerEvents: "none"
+  },
+  loadingBarTrack: {
+    width: "min(160px, 40vw)",
+    height: "2px",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    overflow: "hidden"
+  },
+  loadingBarFill: {
+    height: "100%",
+    backgroundColor: "#00f0ff",
+    transition: "width 0.2s ease",
+    boxShadow: "0 0 8px #00f0ff"
   },
   heroBackgroundText: {
     position: "absolute",
