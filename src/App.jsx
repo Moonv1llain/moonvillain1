@@ -1,7 +1,7 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useGLTF, OrbitControls, ContactShadows, Environment, AdaptiveDpr, PerformanceMonitor, useProgress } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
 // Cheap, reliable mobile check. matchMedia(pointer:coarse) catches touch
@@ -28,7 +28,7 @@ function Helmet() {
   const { scene } = useGLTF("/helmet.glb");
   const [fitScale, setFitScale] = useState(1);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const box = new THREE.Box3().setFromObject(scene);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
@@ -49,17 +49,21 @@ function Helmet() {
         child.castShadow = true;
         child.receiveShadow = true;
 
-        // Slightly lighter than pure black so the metal actually has
-        // something to reflect off the fill/key lights below — at
-        // metalness 0.98 a near-black base with no fill light just
-        // reads as a dark blob with two hot spots.
-        child.material.roughness = 0.3;
-        child.material.metalness = 0.9;
-        child.material.color.setHex(0x2a2a30);
-        child.material.envMapIntensity = 1.2;
+        // Dark liquid metal: low roughness so it stays glossy/mirror-like,
+        // high metalness, near-black base — the neon spotlights and
+        // environment do the work of defining its shape via reflection,
+        // the same way a wet, black chrome surface reads its surroundings
+        // rather than its own diffuse color.
+        child.material.roughness = 0.16;
+        child.material.metalness = 0.95;
+        child.material.color.setHex(0x1c1c22);
+        child.material.envMapIntensity = 1.5;
         child.material.needsUpdate = true;
       }
     });
+    // useLayoutEffect fires synchronously right after commit, before the
+    // browser paints — so this styling is applied before the model is
+    // ever visible, instead of useEffect's flash-then-correct.
   }, [scene]);
 
   useFrame((state) => {
@@ -101,37 +105,37 @@ function ResponsiveCamera() {
 function PremiumLaserLighting() {
   return (
     <>
-      {/* Cheap, always-on base fill so the helmet reads as a 3D shape
-          instead of a silhouette — sky/ground tint keeps it moody
-          without costing a render pass. */}
+      {/* Low, cool base fill — just enough that the helmet never reads as
+          pure silhouette, without flattening the liquid-metal reflections
+          the neon lights are doing the real work of shaping. */}
       <hemisphereLight
-        color="#3a4a6b"
-        groundColor="#0a0a0d"
-        intensity={0.6}
+        color="#2a3550"
+        groundColor="#050508"
+        intensity={0.3}
       />
 
-      {/* Soft key light from front-above — this is what actually
-          reveals the form; the neon lights below are accents on top
-          of it, not the only light source. */}
+      {/* Restrained key light — a hint of form, not a flood. The material
+          is glossy enough now that strong flat lighting kills the "wet
+          black chrome" look and makes it read as plastic instead. */}
       <directionalLight
         position={[1.5, 3, 3]}
-        intensity={1.1}
+        intensity={0.5}
         color="#e8ecf5"
       />
 
-      {/* Neon rim/kicker lights, pulled down to accent levels now that
-          there's a real key light doing the work */}
+      {/* Neon beams do the heavy lifting — this is what actually defines
+          the silhouette against the near-black metal. */}
       <spotLight
         position={[-3, 2, -1]}
         color="#00f0ff"
-        intensity={6}
+        intensity={9}
         angle={0.35}
         penumbra={0.9}
       />
       <spotLight
         position={[3, 1, -1]}
         color="#ff5500"
-        intensity={5}
+        intensity={7}
         angle={0.3}
         penumbra={0.8}
       />
@@ -300,27 +304,33 @@ export default function App() {
 
           <PremiumLaserLighting />
 
-          {/* A 0.9-metalness material with nothing to reflect just looks
-              flat/dead, so even mobile gets an environment — just baked
-              at a much cheaper resolution than desktop. */}
-          <Environment preset="night" intensity={0.35} resolution={isMobile ? 32 : 256} />
+          {/* Lifts the helmet + its ground shadow together, higher on
+              narrow/tall viewports where it was reading as too low in
+              frame — camera framing alone (ResponsiveCamera) fixes
+              cropping, this fixes vertical position within that frame. */}
+          <group position={[0, isMobile ? 0.42 : 0.18, 0]}>
+            <Suspense fallback={null}>
+              {/* Same Suspense boundary as Helmet — if these resolved
+                  separately, the model could appear first with flat/dead
+                  reflections, then visibly "switch on" once the HDR
+                  finished loading a beat later. Now they reveal together. */}
+              <Environment preset="night" intensity={0.4} resolution={isMobile ? 32 : 256} />
+              <Helmet />
+            </Suspense>
 
-          <Suspense fallback={null}>
-            <Helmet />
-          </Suspense>
-
-          {/* ContactShadows renders its own extra pass every frame; give
-              it a much cheaper budget on mobile instead of dropping it,
-              since it's doing a lot of the "grounded" feel. */}
-          <ContactShadows
-            position={[0, -0.65, 0]}
-            opacity={isMobile ? 0.6 : 0.8}
-            scale={4}
-            blur={2.5}
-            far={1}
-            resolution={isMobile ? 128 : 512}
-            frames={isMobile ? 1 : Infinity}
-          />
+            {/* ContactShadows renders its own extra pass every frame; give
+                it a much cheaper budget on mobile instead of dropping it,
+                since it's doing a lot of the "grounded" feel. */}
+            <ContactShadows
+              position={[0, -0.65, 0]}
+              opacity={isMobile ? 0.6 : 0.8}
+              scale={4}
+              blur={2.5}
+              far={1}
+              resolution={isMobile ? 128 : 512}
+              frames={isMobile ? 1 : Infinity}
+            />
+          </group>
 
           {!lowQuality && (
             <EffectComposer disableNormalPass>
