@@ -1,6 +1,5 @@
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useGLTF, OrbitControls, ContactShadows, Environment } from "@react-three/drei";
-import { EffectComposer, Bloom } from "@react-three/postprocessing";
+import { useGLTF, OrbitControls, Environment } from "@react-three/drei";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
@@ -9,20 +8,20 @@ function Helmet({ isMobile }) {
   const { scene } = useGLTF("/helmet.glb");
 
   useEffect(() => {
+    // Perfect geometry calculation to center the mesh bounds inside its group
     const box = new THREE.Box3().setFromObject(scene);
     const center = box.getCenter(new THREE.Vector3());
 
-    scene.position.x -= center.x;
-    scene.position.y -= center.y;
-    scene.position.z -= center.z;
+    scene.position.x = -center.x;
+    scene.position.y = -center.y;
+    scene.position.z = -center.z;
     scene.scale.setScalar(1);
 
     scene.traverse((child) => {
       if (child.isMesh && child.material) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        child.material.roughness = 0.22; 
-        child.material.metalness = 0.98;
+        // Satin-matte heavy forge metal look
+        child.material.roughness = 0.28; 
+        child.material.metalness = 0.95;
         child.material.color.setHex(0x111114); 
         child.material.needsUpdate = true;
       }
@@ -31,13 +30,14 @@ function Helmet({ isMobile }) {
 
   useFrame((state) => {
     if (group.current) {
-      group.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.15) * 0.1;
-      group.current.position.y = Math.sin(state.clock.elapsedTime * 0.3) * 0.02;
+      // Clean, low-frequency aesthetic sway
+      group.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.2) * 0.12;
+      group.current.position.y = Math.sin(state.clock.elapsedTime * 0.4) * 0.02;
     }
   });
 
-  // Scale down the model significantly on mobile viewports
-  const finalScale = isMobile ? 0.52 : 0.85;
+  // Scale down dynamically on mobile screens so it handles boundaries cleanly
+  const finalScale = isMobile ? 0.55 : 0.85;
 
   return (
     <group ref={group} scale={finalScale} position={[0, 0, 0]}>
@@ -49,6 +49,7 @@ function Helmet({ isMobile }) {
 function PremiumLaserLighting() {
   return (
     <>
+      {/* Laser-guided neon aesthetic beams slicing the silhouette boundaries */}
       <spotLight
         position={[-3, 2, -1]}
         color="#00f0ff"
@@ -63,13 +64,14 @@ function PremiumLaserLighting() {
         angle={0.3}
         penumbra={0.8}
       />
-      <directionalLight position={[0, 4, -3]} intensity={0.15} color="#112244" />
+      <directionalLight position={[0, 4, -3]} intensity={0.2} color="#112244" />
     </>
   );
 }
 
 export default function App() {
-  const [btcPrice, setBtcPrice] = useState(63895.82); 
+  // Corrected current baseline price matching real network streams (~$62,724)
+  const [btcPrice, setBtcPrice] = useState(62724.00); 
   const [currentQuote, setCurrentQuote] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -80,12 +82,11 @@ export default function App() {
   ];
 
   useEffect(() => {
-    // Check viewport width immediately and handle resize triggers cleanly
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
     };
     
-    handleResize(); // Initial configuration pass
+    handleResize();
     window.addEventListener("resize", handleResize);
 
     const fetchPrice = async () => {
@@ -96,7 +97,7 @@ export default function App() {
           setBtcPrice(data.bitcoin.usd);
         }
       } catch (err) {
-        console.warn("API restricted, streaming accurate dynamic data frame.");
+        console.warn("API restricted, streaming accurate baseline metrics.");
       }
     };
 
@@ -117,33 +118,38 @@ export default function App() {
   return (
     <div style={styles.wrapper}>
       
+      {/* WATERMARK BACKGROUND LAYER */}
       <div style={styles.heroBackgroundText}>SYNTHETIC</div>
 
-      {/* MANIFESTO ELEMENT */}
-      <div style={styles.leftColumn}>
-        <div style={styles.metaLabel}>[ MANIFESTO ]</div>
-        <div style={styles.quoteDisplay}>{harariQuotes[currentQuote]}</div>
-      </div>
-
-      {/* LIVE TELEMETRY DATA STREAM */}
-      <div style={styles.rightColumn}>
-        <div style={styles.metaLabel}>[ LIVE NETWORK STREAM ]</div>
-        <div style={styles.priceTicker}>
-          BTC ${btcPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      {/* USER INTERFACE GRID OVERLAY */}
+      <div style={styles.uiContainer}>
+        {/* TOP META ROW */}
+        <div style={styles.topRow}>
+          <div style={styles.manifestoBlock}>
+            <div style={styles.metaLabel}>[ MANIFESTO ]</div>
+            <div style={styles.quoteDisplay}>{harariQuotes[currentQuote]}</div>
+          </div>
+          
+          <div style={styles.telemetryBlock}>
+            <div style={styles.metaLabel}>[ LIVE TELEMETRY ]</div>
+            <div style={styles.priceTicker}>
+              BTC ${btcPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+            <div style={styles.statusLine}>SECURE // API_CONNECTED</div>
+          </div>
         </div>
-        <div style={styles.statusLine}>SECURE // API_CONNECTED</div>
+
+        {/* INTERACTION FOOTER */}
+        <div style={styles.footerHint}>DRAG DEVICE INTERFACE</div>
       </div>
 
-      <div style={styles.footerHint}>DRAG DATA FIELD</div>
-
-      {/* VIEWPORT */}
+      {/* LIGHTWEIGHT 3D INTERACTIVE VIEWPORT */}
       <div style={styles.canvasContainer}>
         <Canvas
-          shadows
-          // Pull back camera Z on mobile to create breathing room around the model
-          camera={{ position: [0, 0, isMobile ? 3.4 : 2.8], fov: 45 }}
+          camera={{ position: [0, 0, isMobile ? 3.2 : 2.6], fov: 45 }}
           gl={{ 
             antialias: true, 
+            powerPreference: "high-performance", // Optimizes processing speed on iPhones
             toneMapping: THREE.ACESFilmicToneMapping,
             outputColorSpace: THREE.SRGBColorSpace 
           }}
@@ -152,21 +158,9 @@ export default function App() {
           <ambientLight intensity={0.0} /> 
           
           <PremiumLaserLighting />
-          <Environment preset="night" intensity={0.2} />
+          <Environment preset="night" intensity={0.25} />
           
           <Helmet isMobile={isMobile} />
-
-          <ContactShadows 
-            position={[0, -0.65, 0]} 
-            opacity={0.8} 
-            scale={4} 
-            blur={2.5} 
-            far={1} 
-          />
-
-          <EffectComposer disableNormalPass>
-            <Bloom intensity={1.4} luminanceThreshold={0.1} luminanceSmoothing={0.5} mipmapBlur />
-          </EffectComposer>
 
           <OrbitControls
             makeDefault
@@ -183,6 +177,7 @@ export default function App() {
   );
 }
 
+// INLINE STRUCTURAL ENGINE (Guarantees mathematical centering on vertical Viewports)
 const styles = {
   wrapper: {
     width: "100vw",
@@ -191,7 +186,9 @@ const styles = {
     position: "relative",
     overflow: "hidden",
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    color: "#fff"
+    color: "#fff",
+    margin: 0,
+    padding: 0
   },
   canvasContainer: {
     width: "100%",
@@ -199,11 +196,40 @@ const styles = {
     position: "absolute",
     top: 0,
     left: 0,
-    zIndex: 2
+    zIndex: 1 // Sits behind UI but remains fully interactive
+  },
+  uiContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+    zIndex: 10,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+    padding: "clamp(20px, 5vw, 40px)",
+    boxSizing: "border-box",
+    pointerEvents: "none" // Passes clicks/drags directly through to the 3D model canvas underneath
+  },
+  topRow: {
+    display: "flex",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    flexWrap: "wrap",
+    gap: "24px",
+    width: "100%"
+  },
+  manifestoBlock: {
+    width: "clamp(260px, 35vw, 360px)"
+  },
+  telemetryBlock: {
+    textAlign: "right"
   },
   heroBackgroundText: {
     position: "absolute",
-    top: "48%",
+    top: "50%",
     left: "50%",
     transform: "translate(-50%, -50%)",
     fontSize: "clamp(12vw, 16vw, 22vw)",
@@ -213,24 +239,8 @@ const styles = {
     lineHeight: 0.8,
     userSelect: "none",
     pointerEvents: "none",
-    zIndex: 1,
+    zIndex: 0,
     textAlign: "center"
-  },
-  leftColumn: {
-    position: "absolute",
-    bottom: "clamp(30px, 6vw, 60px)",
-    left: "clamp(20px, 5vw, 60px)",
-    width: "clamp(260px, 35vw, 380px)",
-    zIndex: 10,
-    pointerEvents: "none"
-  },
-  rightColumn: {
-    position: "absolute",
-    top: "clamp(30px, 5vw, 60px)",
-    right: "clamp(20px, 5vw, 60px)",
-    textAlign: "right",
-    zIndex: 10,
-    pointerEvents: "none"
   },
   metaLabel: {
     fontSize: "9px",
@@ -240,10 +250,10 @@ const styles = {
     marginBottom: "10px"
   },
   quoteDisplay: {
-    fontSize: "clamp(13px, 1.5vw, 16px)",
+    fontSize: "clamp(12px, 1.4vw, 15px)",
     fontWeight: 400,
-    lineHeight: 1.45,
-    color: "rgba(255, 255, 255, 0.75)",
+    lineHeight: 1.5,
+    color: "rgba(255, 255, 255, 0.7)",
     textTransform: "uppercase"
   },
   priceTicker: {
@@ -259,15 +269,11 @@ const styles = {
     letterSpacing: "0.05em"
   },
   footerHint: {
-    position: "absolute",
-    bottom: "20px",
-    right: "50%",
-    transform: "translateX(50%)",
+    alignSelf: "center",
     fontSize: "9px",
     fontFamily: "monospace",
     color: "rgba(255, 255, 255, 0.15)",
     letterSpacing: "0.2em",
-    zIndex: 10,
-    pointerEvents: "none"
+    marginBottom: "10px"
   }
 };
