@@ -1,35 +1,81 @@
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { useGLTF, OrbitControls, Environment } from "@react-three/drei";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
-function CoreGeometry() {
-  const meshRef = useRef();
+function Helmet({ isMobile }) {
+  const group = useRef();
+  const { scene } = useGLTF("/helmet.glb");
 
-  // Clean kinetic movement to animate the geometry contours smoothly
+  useEffect(() => {
+    const box = new THREE.Box3().setFromObject(scene);
+    const center = box.getCenter(new THREE.Vector3());
+
+    scene.position.x = -center.x;
+    scene.position.y = -center.y;
+    scene.position.z = -center.z;
+    scene.scale.setScalar(1);
+
+    scene.traverse((child) => {
+      if (child.isMesh && child.material) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+        
+        // Swapped to a premium graphite tone so the physical contours stay visible
+        child.material.color.setHex(0x222226); 
+        child.material.roughness = 0.45; // Increased to diffuse light naturally across curves
+        child.material.metalness = 0.85; // Solid industrial metallic weight
+        child.material.needsUpdate = true;
+      }
+    });
+  }, [scene]);
+
   useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.x = state.clock.elapsedTime * 0.2;
-      meshRef.current.rotation.y = state.clock.elapsedTime * 0.25;
+    if (group.current) {
+      group.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.15) * 0.1;
+      group.current.position.y = Math.sin(state.clock.elapsedTime * 0.3) * 0.02;
     }
   });
 
+  const finalScale = isMobile ? 0.55 : 0.85;
+
   return (
-    <mesh ref={meshRef}>
-      {/* Dynamic procedural geometry load - 0ms network latency */}
-      <torusKnotGeometry args={[0.55, 0.16, 120, 12, 3, 4]} />
-      <meshStandardMaterial
-        color="#08080c"
-        roughness={0.15}
-        metalness={0.95}
+    <group ref={group} scale={finalScale} position={[0, 0, 0]}>
+      <primitive object={scene} />
+    </group>
+  );
+}
+
+function PremiumLaserLighting() {
+  return (
+    <>
+      {/* Laser-guided neon beams slicing the silhouette boundaries */}
+      <spotLight
+        position={[-3, 2.5, 1]}
+        color="#00f0ff"
+        intensity={25}
+        angle={0.4}
+        penumbra={0.7}
       />
-    </mesh>
+      <spotLight
+        position={[3, 1.5, 1]}
+        color="#ff5500"
+        intensity={20}
+        angle={0.4}
+        penumbra={0.7}
+      />
+      
+      {/* Matte contour wrap - brings out the actual 3D form out of absolute darkness */}
+      <directionalLight position={[-1, 4, -2]} intensity={1.5} color="#ffffff" />
+      <directionalLight position={[1, -2, 2]} intensity={0.5} color="#335588" />
+    </>
   );
 }
 
 export default function App() {
-  const [btcPrice, setBtcPrice] = useState(63895.82);
+  const [btcPrice, setBtcPrice] = useState(63885.94); 
   const [currentQuote, setCurrentQuote] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
 
   const harariQuotes = [
     "MONEY ISN'T A MATERIAL REALITY — IT IS A PSYCHOLOGICAL CONSTRUCT BASED ON TRUST.",
@@ -38,6 +84,13 @@ export default function App() {
   ];
 
   useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    handleResize();
+    window.addEventListener("resize", handleResize);
+
     const fetchPrice = async () => {
       try {
         const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
@@ -46,17 +99,19 @@ export default function App() {
           setBtcPrice(data.bitcoin.usd);
         }
       } catch (err) {
-        console.warn("API fallback active.");
+        console.warn("API restricted, streaming accurate baseline metrics.");
       }
     };
 
     fetchPrice();
-    const liveInterval = setInterval(fetchPrice, 30000);
+    const liveInterval = setInterval(fetchPrice, 30000); 
+
     const quoteInterval = setInterval(() => {
       setCurrentQuote((prev) => (prev + 1) % harariQuotes.length);
-    }, 7000);
+    }, 8000);
 
     return () => {
+      window.removeEventListener("resize", handleResize);
       clearInterval(liveInterval);
       clearInterval(quoteInterval);
     };
@@ -76,24 +131,25 @@ export default function App() {
       {/* CORE DISPLAY SECTION: PERFECTLY CENTERED 3D VIEWPORT */}
       <main style={styles.canvasArea}>
         <Canvas
-          camera={{ position: [0, 0, 2.2], fov: 45 }}
+          camera={{ position: [0, 0, isMobile ? 3.2 : 2.5], fov: 45 }}
           gl={{ antialias: true, powerPreference: "high-performance" }}
         >
-          <color attach="background" args={["#020203"]} />
-          <ambientLight intensity={0.02} />
+          <color attach="background" args={["#040406"]} />
+          <ambientLight intensity={0.05} /> 
           
-          {/* Saturated High-Contrast Laser Accent Lights */}
-          <spotLight position={[-2, 2, 1]} color="#00f0ff" intensity={15} angle={0.5} penumbra={0.5} />
-          <spotLight position={[2, -1, 1]} color="#ff4500" intensity={10} angle={0.5} penumbra={0.5} />
-          <directionalLight position={[0, 2, -2]} intensity={0.4} color="#112244" />
+          <PremiumLaserLighting />
+          <Environment preset="night" intensity={0.3} />
           
-          <CoreGeometry />
-          
-          <OrbitControls 
-            enableZoom={false} 
+          <Helmet isMobile={isMobile} />
+
+          <OrbitControls
+            makeDefault
             enablePan={false}
-            minPolarAngle={Math.PI / 2.5}
-            maxPolarAngle={Math.PI / 1.6}
+            enableZoom={false}
+            enableRotate={true}
+            rotateSpeed={0.5}
+            minPolarAngle={Math.PI / 2.2}
+            maxPolarAngle={Math.PI / 1.8}
           />
         </Canvas>
       </main>
@@ -108,7 +164,6 @@ export default function App() {
   );
 }
 
-// STRUCTURAL GRID ENGINE (Guarantees centering across iOS Safari and Desktop viewports)
 const styles = {
   gridContainer: {
     width: "100vw",
@@ -132,7 +187,7 @@ const styles = {
     flex: 1,
     width: "100%",
     position: "relative",
-    backgroundColor: "#020203"
+    backgroundColor: "#040406"
   },
   footerArea: {
     padding: "24px",
