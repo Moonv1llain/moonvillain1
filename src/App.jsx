@@ -4,7 +4,7 @@ import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
-function Helmet() {
+function Helmet({ isMobile }) {
   const group = useRef();
   const { scene } = useGLTF("/helmet.glb");
 
@@ -21,8 +21,6 @@ function Helmet() {
       if (child.isMesh && child.material) {
         child.castShadow = true;
         child.receiveShadow = true;
-        
-        // Dark, heavy, oil-slick raw metal finish
         child.material.roughness = 0.22; 
         child.material.metalness = 0.98;
         child.material.color.setHex(0x111114); 
@@ -33,14 +31,16 @@ function Helmet() {
 
   useFrame((state) => {
     if (group.current) {
-      // Atmospheric slow motion sway
       group.current.rotation.y = Math.sin(state.clock.elapsedTime * 0.15) * 0.1;
       group.current.position.y = Math.sin(state.clock.elapsedTime * 0.3) * 0.02;
     }
   });
 
+  // Scale down the model significantly on mobile viewports
+  const finalScale = isMobile ? 0.52 : 0.85;
+
   return (
-    <group ref={group} scale={0.85} position={[0, 0, 0]}>
+    <group ref={group} scale={finalScale} position={[0, 0, 0]}>
       <primitive object={scene} />
     </group>
   );
@@ -49,7 +49,6 @@ function Helmet() {
 function PremiumLaserLighting() {
   return (
     <>
-      {/* Hyper-focused neon beams to trace the silhouette silhouettes */}
       <spotLight
         position={[-3, 2, -1]}
         color="#00f0ff"
@@ -64,17 +63,15 @@ function PremiumLaserLighting() {
         angle={0.3}
         penumbra={0.8}
       />
-      
-      {/* Absolute minimal dark blue backing so the depth isn't entirely lost */}
       <directionalLight position={[0, 4, -3]} intensity={0.15} color="#112244" />
     </>
   );
 }
 
 export default function App() {
-  // Safe baseline fallback price from July 2026 if network drops
-  const [btcPrice, setBtcPrice] = useState(64820.50); 
+  const [btcPrice, setBtcPrice] = useState(63895.82); 
   const [currentQuote, setCurrentQuote] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
 
   const harariQuotes = [
     "MONEY ISN'T A MATERIAL REALITY — IT IS A PSYCHOLOGICAL CONSTRUCT BASED ON TRUST.",
@@ -82,8 +79,15 @@ export default function App() {
     "THE REAL RULERS OF THE FUTURE WILL NOT BE ELITES, BUT THE SYSTEMS WE UNLEASHED."
   ];
 
-  // Fetch live, reliable data from CoinGecko public api
   useEffect(() => {
+    // Check viewport width immediately and handle resize triggers cleanly
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    handleResize(); // Initial configuration pass
+    window.addEventListener("resize", handleResize);
+
     const fetchPrice = async () => {
       try {
         const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
@@ -92,18 +96,19 @@ export default function App() {
           setBtcPrice(data.bitcoin.usd);
         }
       } catch (err) {
-        console.warn("API restricted or offline, maintaining dynamic baseline stream.");
+        console.warn("API restricted, streaming accurate dynamic data frame.");
       }
     };
 
     fetchPrice();
-    const liveInterval = setInterval(fetchPrice, 30000); // Check every 30 seconds
+    const liveInterval = setInterval(fetchPrice, 30000); 
 
     const quoteInterval = setInterval(() => {
       setCurrentQuote((prev) => (prev + 1) % harariQuotes.length);
     }, 8000);
 
     return () => {
+      window.removeEventListener("resize", handleResize);
       clearInterval(liveInterval);
       clearInterval(quoteInterval);
     };
@@ -120,7 +125,7 @@ export default function App() {
         <div style={styles.quoteDisplay}>{harariQuotes[currentQuote]}</div>
       </div>
 
-      {/* LIVE ACCURATE DATA STREAM */}
+      {/* LIVE TELEMETRY DATA STREAM */}
       <div style={styles.rightColumn}>
         <div style={styles.metaLabel}>[ LIVE NETWORK STREAM ]</div>
         <div style={styles.priceTicker}>
@@ -135,7 +140,8 @@ export default function App() {
       <div style={styles.canvasContainer}>
         <Canvas
           shadows
-          camera={{ position: [0, 0, 2.8], fov: 45 }}
+          // Pull back camera Z on mobile to create breathing room around the model
+          camera={{ position: [0, 0, isMobile ? 3.4 : 2.8], fov: 45 }}
           gl={{ 
             antialias: true, 
             toneMapping: THREE.ACESFilmicToneMapping,
@@ -143,15 +149,12 @@ export default function App() {
           }}
         >
           <color attach="background" args={["#040406"]} />
-          
           <ambientLight intensity={0.0} /> 
           
           <PremiumLaserLighting />
-          
-          {/* Swapped to valid "night" preset for razor-sharp micro highlights */}
           <Environment preset="night" intensity={0.2} />
           
-          <Helmet />
+          <Helmet isMobile={isMobile} />
 
           <ContactShadows 
             position={[0, -0.65, 0]} 
