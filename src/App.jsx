@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useGLTF, OrbitControls, ContactShadows, Environment, AdaptiveDpr, PerformanceMonitor, useProgress } from "@react-three/drei";
+import { useGLTF, OrbitControls, ContactShadows, AdaptiveDpr, PerformanceMonitor, useProgress } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
@@ -50,14 +50,12 @@ function Helmet() {
         child.receiveShadow = true;
 
         // Dark liquid metal: low roughness so it stays glossy/mirror-like,
-        // high metalness, near-black base — the neon spotlights and
-        // environment do the work of defining its shape via reflection,
-        // the same way a wet, black chrome surface reads its surroundings
-        // rather than its own diffuse color.
+        // high metalness, near-black base. No environment map — reflections
+        // come purely from the direct lights below, which is also why
+        // there's nothing async left to pop in after first paint.
         child.material.roughness = 0.16;
-        child.material.metalness = 0.95;
+        child.material.metalness = 0.9;
         child.material.color.setHex(0x1c1c22);
-        child.material.envMapIntensity = 1.5;
         child.material.needsUpdate = true;
       }
     });
@@ -102,46 +100,31 @@ function ResponsiveCamera() {
   return null;
 }
 
-function PremiumLaserLighting() {
+// Fully synchronous lighting — no HDR environment map, nothing that loads
+// async, nothing that can change after the first frame. Every light here
+// exists in the scene graph from the very first render. The "liquid metal"
+// look comes from tight, low-roughness specular highlights off these
+// lights directly, not from reflected surroundings.
+function NeonRig() {
   return (
     <>
-      {/* Low, cool base fill — just enough that the helmet never reads as
-          pure silhouette, without flattening the liquid-metal reflections
-          the neon lights are doing the real work of shaping. */}
-      <hemisphereLight
-        color="#2a3550"
-        groundColor="#050508"
-        intensity={0.3}
-      />
+      {/* Faint always-on visibility so the helmet is never fully black in
+          shadow — this is a flat scene constant, not something that loads. */}
+      <ambientLight intensity={0.12} color="#141824" />
 
-      {/* Restrained key light — a hint of form, not a flood. The material
-          is glossy enough now that strong flat lighting kills the "wet
-          black chrome" look and makes it read as plastic instead. */}
-      <directionalLight
-        position={[1.5, 3, 3]}
-        intensity={0.5}
-        color="#e8ecf5"
-      />
+      {/* Key light: defines the primary form. Kept modest so the glossy
+          material still reads as dark liquid rather than lit plastic. */}
+      <directionalLight position={[2, 3, 4]} intensity={1.0} color="#ffffff" />
 
-      {/* Neon beams do the heavy lifting — this is what actually defines
-          the silhouette against the near-black metal. */}
-      <spotLight
-        position={[-3, 2, -1]}
-        color="#00f0ff"
-        intensity={9}
-        angle={0.35}
-        penumbra={0.9}
-      />
-      <spotLight
-        position={[3, 1, -1]}
-        color="#ff5500"
-        intensity={7}
-        angle={0.3}
-        penumbra={0.8}
-      />
-      
-      {/* Absolute minimal dark blue backing so the depth isn't entirely lost */}
-      <directionalLight position={[0, 4, -3]} intensity={0.15} color="#112244" />
+      {/* Cyan neon — left rim */}
+      <pointLight position={[-2.4, 1.2, 1.5]} color="#00f0ff" intensity={6} distance={8} decay={2} />
+
+      {/* Orange neon — right rim */}
+      <pointLight position={[2.4, 0.6, 1.3]} color="#ff5500" intensity={5} distance={8} decay={2} />
+
+      {/* Cool back light so the silhouette separates from the black
+          background instead of merging into it */}
+      <directionalLight position={[0, 1.5, -3]} intensity={0.4} color="#3355aa" />
     </>
   );
 }
@@ -300,21 +283,10 @@ export default function App() {
 
           <color attach="background" args={["#040406"]} />
 
-          <ambientLight intensity={0.0} />
+          <NeonRig />
 
-          <PremiumLaserLighting />
-
-          {/* Lifts the helmet + its ground shadow together, higher on
-              narrow/tall viewports where it was reading as too low in
-              frame — camera framing alone (ResponsiveCamera) fixes
-              cropping, this fixes vertical position within that frame. */}
           <group position={[0, isMobile ? 0.42 : 0.18, 0]}>
             <Suspense fallback={null}>
-              {/* Same Suspense boundary as Helmet — if these resolved
-                  separately, the model could appear first with flat/dead
-                  reflections, then visibly "switch on" once the HDR
-                  finished loading a beat later. Now they reveal together. */}
-              <Environment preset="night" intensity={0.4} resolution={isMobile ? 32 : 256} />
               <Helmet />
             </Suspense>
 
