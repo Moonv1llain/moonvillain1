@@ -1,4 +1,4 @@
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useGLTF, OrbitControls, ContactShadows, Environment, AdaptiveDpr, PerformanceMonitor, useProgress } from "@react-three/drei";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -77,6 +77,27 @@ function Helmet() {
   );
 }
 
+// A camera tuned for landscape stays too close on a tall phone screen and
+// crops the model. This watches the actual viewport aspect and pulls the
+// camera back (and levels its target) so the full helmet is always framed,
+// portrait or landscape, without hardcoding a mobile-only distance.
+function ResponsiveCamera() {
+  const { camera, size } = useThree();
+
+  useEffect(() => {
+    const aspect = size.width / size.height;
+    // Below ~0.75 aspect (most phones in portrait) pull back progressively
+    // — the narrower the viewport, the further back the camera needs to be
+    // to keep the same vertical framing.
+    const z = aspect >= 0.75 ? 2.8 : THREE.MathUtils.clamp(2.8 + (0.75 - aspect) * 2.6, 2.8, 4.6);
+    camera.position.set(0, 0, z);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+  }, [camera, size]);
+
+  return null;
+}
+
 function PremiumLaserLighting() {
   return (
     <>
@@ -123,29 +144,55 @@ function PremiumLaserLighting() {
 
 // Plain HTML overlay, not a 3D object — costs nothing on the GPU while the
 // model streams in. useProgress hooks the global THREE loading manager so
-// this reflects real bytes-loaded, not a guess.
+// the percentage reflects real bytes-loaded, not a guess.
+const BOOT_LINES = [
+  "INITIALIZING NEURAL LINK",
+  "DECRYPTING ASSET STREAM",
+  "CALIBRATING HELMET RIG",
+  "SYNCHRONIZING OPTICS",
+  "AUTHENTICATING NODE"
+];
+
 function LoadingVeil() {
   const { progress, active } = useProgress();
   const [visible, setVisible] = useState(true);
+  const [exiting, setExiting] = useState(false);
+  const [lineIndex, setLineIndex] = useState(0);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setLineIndex((i) => (i + 1) % BOOT_LINES.length);
+    }, 900);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     if (!active && progress >= 100) {
-      const t = setTimeout(() => setVisible(false), 350);
-      return () => clearTimeout(t);
+      const t1 = setTimeout(() => setExiting(true), 200);
+      const t2 = setTimeout(() => setVisible(false), 650);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+      };
     }
   }, [active, progress]);
 
   if (!visible) return null;
 
+  const pct = Math.floor(Math.max(progress, 2));
+
   return (
-    <div
-      style={{
-        ...styles.loadingVeil,
-        opacity: !active && progress >= 100 ? 0 : 1
-      }}
-    >
-      <div style={styles.loadingBarTrack}>
-        <div style={{ ...styles.loadingBarFill, width: `${Math.max(progress, 4)}%` }} />
+    <div style={{ ...styles.loadingVeil, opacity: exiting ? 0 : 1 }}>
+      <div style={styles.loadingScanlines} />
+      <div style={styles.loadingCore}>
+        <div style={styles.loadingPct}>{pct.toString().padStart(2, "0")}%</div>
+        <div style={styles.loadingBarTrack}>
+          <div style={{ ...styles.loadingBarFill, width: `${pct}%` }} />
+        </div>
+        <div style={styles.loadingLine}>
+          <span style={styles.loadingCaret}>&gt;</span> {BOOT_LINES[lineIndex]}
+          <span style={styles.loadingBlink}>_</span>
+        </div>
       </div>
     </div>
   );
@@ -245,6 +292,7 @@ export default function App() {
             onIncline={() => setDegraded(false)}
           />
           <AdaptiveDpr pixelated />
+          <ResponsiveCamera />
 
           <color attach="background" args={["#040406"]} />
 
@@ -328,20 +376,54 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#040406",
-    transition: "opacity 0.35s ease",
-    pointerEvents: "none"
+    transition: "opacity 0.45s ease",
+    pointerEvents: "none",
+    overflow: "hidden"
+  },
+  loadingScanlines: {
+    position: "absolute",
+    inset: 0,
+    backgroundImage:
+      "repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 1px, transparent 1px, transparent 3px)",
+    mixBlendMode: "overlay"
+  },
+  loadingCore: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "14px"
+  },
+  loadingPct: {
+    fontFamily: "monospace",
+    fontSize: "13px",
+    color: "rgba(0, 240, 255, 0.6)",
+    letterSpacing: "0.3em"
   },
   loadingBarTrack: {
-    width: "min(160px, 40vw)",
-    height: "2px",
-    backgroundColor: "rgba(255,255,255,0.1)",
+    width: "min(200px, 46vw)",
+    height: "1px",
+    backgroundColor: "rgba(255,255,255,0.08)",
     overflow: "hidden"
   },
   loadingBarFill: {
     height: "100%",
     backgroundColor: "#00f0ff",
-    transition: "width 0.2s ease",
-    boxShadow: "0 0 8px #00f0ff"
+    transition: "width 0.25s ease",
+    boxShadow: "0 0 10px #00f0ff, 0 0 2px #00f0ff"
+  },
+  loadingLine: {
+    fontFamily: "monospace",
+    fontSize: "10px",
+    color: "rgba(255,255,255,0.35)",
+    letterSpacing: "0.15em",
+    minHeight: "12px"
+  },
+  loadingCaret: {
+    color: "#00f0ff"
+  },
+  loadingBlink: {
+    animation: "blinkCaret 1s step-end infinite",
+    color: "#00f0ff"
   },
   heroBackgroundText: {
     position: "absolute",
