@@ -35,25 +35,37 @@ function Loader() {
 function Helmet() {
   const group = useRef();
   const { scene } = useGLTF("/helmet.glb");
+  const [fitScale, setFitScale] = useState(1);
 
   useEffect(() => {
     const box = new THREE.Box3().setFromObject(scene);
     const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
 
     scene.position.x -= center.x;
     scene.position.y -= center.y;
     scene.position.z -= center.z;
     scene.scale.setScalar(1);
 
+    // Auto-fit: target the helmet's longest dimension to ~1.1 world units
+    // instead of a hardcoded scale, so it's not "too big" regardless of
+    // how the source file was authored/exported.
+    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+    setFitScale(1.1 / maxDim);
+
     scene.traverse((child) => {
       if (child.isMesh && child.material) {
         child.castShadow = true;
         child.receiveShadow = true;
-        
-        // Dark, heavy, oil-slick raw metal finish
-        child.material.roughness = 0.22; 
-        child.material.metalness = 0.98;
-        child.material.color.setHex(0x111114); 
+
+        // Slightly lighter than pure black so the metal actually has
+        // something to reflect off the fill/key lights below — at
+        // metalness 0.98 a near-black base with no fill light just
+        // reads as a dark blob with two hot spots.
+        child.material.roughness = 0.3;
+        child.material.metalness = 0.9;
+        child.material.color.setHex(0x2a2a30);
+        child.material.envMapIntensity = 1.2;
         child.material.needsUpdate = true;
       }
     });
@@ -68,7 +80,7 @@ function Helmet() {
   });
 
   return (
-    <group ref={group} scale={0.85} position={[0, 0, 0]}>
+    <group ref={group} scale={fitScale} position={[0, 0, 0]}>
       <primitive object={scene} />
     </group>
   );
@@ -77,18 +89,37 @@ function Helmet() {
 function PremiumLaserLighting() {
   return (
     <>
-      {/* Hyper-focused neon beams to trace the silhouette silhouettes */}
+      {/* Cheap, always-on base fill so the helmet reads as a 3D shape
+          instead of a silhouette — sky/ground tint keeps it moody
+          without costing a render pass. */}
+      <hemisphereLight
+        color="#3a4a6b"
+        groundColor="#0a0a0d"
+        intensity={0.6}
+      />
+
+      {/* Soft key light from front-above — this is what actually
+          reveals the form; the neon lights below are accents on top
+          of it, not the only light source. */}
+      <directionalLight
+        position={[1.5, 3, 3]}
+        intensity={1.1}
+        color="#e8ecf5"
+      />
+
+      {/* Neon rim/kicker lights, pulled down to accent levels now that
+          there's a real key light doing the work */}
       <spotLight
         position={[-3, 2, -1]}
         color="#00f0ff"
-        intensity={18}
-        angle={0.3}
-        penumbra={0.8}
+        intensity={6}
+        angle={0.35}
+        penumbra={0.9}
       />
       <spotLight
         position={[3, 1, -1]}
         color="#ff5500"
-        intensity={14}
+        intensity={5}
         angle={0.3}
         penumbra={0.8}
       />
@@ -198,9 +229,10 @@ export default function App() {
 
           <PremiumLaserLighting />
 
-          {/* HDR env bake is real GPU cost — skip it on phones, the two
-              spotlights already carry the look there. */}
-          {!isMobile && <Environment preset="night" intensity={0.2} />}
+          {/* A 0.9-metalness material with nothing to reflect just looks
+              flat/dead, so even mobile gets an environment — just baked
+              at a much cheaper resolution than desktop. */}
+          <Environment preset="night" intensity={0.35} resolution={isMobile ? 32 : 256} />
 
           <Suspense fallback={<Loader />}>
             <Helmet />
